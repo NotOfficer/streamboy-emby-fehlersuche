@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fehlersuche für Emby Streaming</title>
+    <link rel="stylesheet" href="style/styles.css" />
+    <!-- Map libs: Leaflet + Awesome Markers + Font Awesome -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.awesome-markers/dist/leaflet.awesome-markers.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <!-- MapLibre GL for OpenFreeMap (vector tiles) -->
+    <link
+      href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main class="container">
+      <header class="page-header">
+        <h1>Fehlersuche für Emby Streaming</h1>
+      </header>
+
+      <!-- Schritt 1 -->
+      <section id="step1" class="step active" aria-labelledby="step1-title">
+        <h2 id="step1-title">Schritt 1 · Emby-Link eingeben</h2>
+        <p>
+          Bitte gib deinen Emby-Link aus dem
+          <a
+            href="https://box.streamboy.tv"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Streamboy Dashboard</a
+          >
+          ein.
+        </p>
+
+        <details class="help-collapsible">
+          <summary>Wo finde ich meinen Emby-Link?</summary>
+          <figure class="hint-figure">
+            <img
+              src="img/service_information.png"
+              alt="Screenshot: Service Information – hier steht der Emby-Link"
+            />
+            <figcaption>Beispielansicht im Dashboard</figcaption>
+          </figure>
+        </details>
+
+        <label class="input-label" for="embyLinkInput">Emby-Link</label>
+        <input
+          id="embyLinkInput"
+          class="text-input"
+          type="password"
+          inputmode="url"
+          placeholder="https://12345.abcdef.xyz"
+          autocomplete="url"
+          spellcheck="false"
+          aria-describedby="embyLinkHelp"
+          required
+        />
+        <div id="embyLinkHelp" class="help-text">
+          Nach Eingabe wird automatisch geprüft, ob es ein Emby-Server ist.
+          Drücke Enter oder verlasse das Feld, um die Prüfung zu starten.
+        </div>
+
+        <div
+          id="step1Status"
+          class="status hidden"
+          role="status"
+          aria-live="polite"
+          aria-hidden="true"
+        ></div>
+        <div id="serverInfo" class="card hidden" aria-hidden="true"></div>
+
+        <div class="actions">
+          <button id="toStep2" class="btn" disabled>Weiter</button>
+          <button id="resetAll" class="btn btn-secondary" type="button">
+            Zurücksetzen
+          </button>
+        </div>
+      </section>
+
+      <!-- Schritt 2 -->
+      <section id="step2" class="step" aria-labelledby="step2-title" hidden>
+        <h2 id="step2-title">Schritt 2 · Erreichter Cloudflare-Standort</h2>
+        <p>
+          Wir prüfen jetzt, welcher Cloudflare-Standort erreicht wird wenn du
+          streamst.
+        </p>
+
+        <div
+          id="step2Status"
+          class="status"
+          role="status"
+          aria-live="polite"
+        ></div>
+        <div id="cfRow" class="cards-row hidden" aria-hidden="true">
+          <div id="cfResults" class="card hidden" aria-hidden="true"></div>
+          <div id="ispCard" class="card hidden" aria-hidden="true"></div>
+        </div>
+
+        <div id="mapCard" class="card hidden" aria-hidden="true">
+          <div class="info-row">
+            <span class="k">Karte</span
+            ><span class="v">Dein Standort ↔ Cloudflare Standort</span>
+          </div>
+          <div id="map" class="map"></div>
+        </div>
+
+        <div
+          id="asnWarning"
+          class="status warn hidden"
+          role="note"
+          aria-live="polite"
+        ></div>
+
+        <div class="actions">
+          <button id="backTo1" class="btn btn-secondary" type="button">
+            Zurück
+          </button>
+        </div>
+      </section>
+
+      <footer class="page-footer">
+        <div class="notice-box" role="note" aria-label="Hinweis">
+          <div class="notice-title">Hinweis</div>
+          <div class="notice-body">
+            Alle Prüfungen laufen ausschließlich in deinem Browser. Es werden
+            nur die von dir eingegebenen Server-Endpunkte und die offizielle
+            Cloudflare-Status-API abgefragt.
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <script defer src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script
+      defer
+      src="https://unpkg.com/leaflet.awesome-markers/dist/leaflet.awesome-markers.min.js"
+    ></script>
+    <script
+      defer
+      src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"
+    ></script>
+    <script
+      defer
+      src="https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js"
+    ></script>
+    <script defer src="scripts/app.js"></script>
+  </body>
+</html>
