@@ -14,6 +14,7 @@
     cfRow: document.getElementById('cfRow'),
     asnWarning: document.getElementById('asnWarning'),
     backTo1: document.getElementById('backTo1'),
+    pingEval: document.getElementById('pingEval'),
   };
 
   let state = {
@@ -27,6 +28,8 @@
     remoteLabel: '',
     clientAsn: null,
     clientAsOrg: '',
+    pingSamplesMs: [],
+    pingMedianMs: null,
   };
 
   // Helpers
@@ -114,21 +117,19 @@
 
   function renderServerInfo(info) {
     els.serverInfo.innerHTML = `
-      <div class="info-row"><span class="k">ServerName</span><span class="v">${escapeHtml(info.ServerName)}</span></div>
+      <div class="info-row"><span class="k">Name</span><span class="v">${escapeHtml(info.ServerName)}</span></div>
       <div class="info-row"><span class="k">Version</span><span class="v">${escapeHtml(info.Version)}</span></div>
     `;
     show(els.serverInfo);
   }
 
-  function renderCfResults({ colo, componentName /*, embyHost*/ }) {
-    const coloText = colo ? `${colo}` : 'Unbekannt';
+  function renderCfResults({ componentName }) {
     const compText = componentName || 'Nicht gefunden';
     const distRow = (state.distanceMeters != null)
-      ? `<div class="info-row"><span class="k">Entfernung (Luftlinie)</span><span class="v">${formatDistance(state.distanceMeters)}</span></div>`
+      ? `<div class="info-row"><span class="k">Distanz</span><span class="v">${formatDistance(state.distanceMeters)}</span></div>`
       : '';
     els.cfResults.innerHTML = `
-      <div class="info-row"><span class="k">Cloudflare Standort</span><span class="v">${escapeHtml(coloText)}</span></div>
-      <div class="info-row"><span class="k">Standort Name</span><span class="v">${escapeHtml(compText)}</span></div>
+      <div class="info-row"><span class="k">Server</span><span class="v">${escapeHtml(compText)}</span></div>
       ${distRow}
     `;
     show(els.cfResults);
@@ -150,6 +151,12 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function formatMs(ms) {
+    if (ms == null || isNaN(ms)) return '';
+    if (ms < 100) return `${ms.toFixed(1)} ms`;
+    return `${Math.round(ms)} ms`;
   }
 
   function toggleSteps(stepIndex) {
@@ -217,28 +224,34 @@
 
     // Build trace URL at the origin root (protocol + host)
     let traceUrl = '';
+    // Build Emby public info URL for ping measurement
+    let embyInfoUrl = '';
     try {
       const u = new URL(base);
       traceUrl = `${u.protocol}//${u.host}/cdn-cgi/trace`;
+      embyInfoUrl = `${u.protocol}//${u.host}/emby/system/info/public`;
     } catch {
       traceUrl = base.replace(/\/$/, '') + '/cdn-cgi/trace';
+      embyInfoUrl = base.replace(/\/$/, '') + '/emby/system/info/public';
     }
 
-    setStatus(els.step2Status, 'pending', 'Ermittle Cloudflare-Standort (colo)…');
+    setStatus(els.step2Status, 'pending', 'Ermittle Cloudflare-Standort…');
     hide(els.cfResults);
     if (els.cfRow) hide(els.cfRow);
     if (els.ispCard) hide(els.ispCard);
     if (els.asnWarning) hide(els.asnWarning);
+    if (els.pingEval) hide(els.pingEval);
     const mapCardEl = document.getElementById('mapCard');
     if (mapCardEl) hide(mapCardEl);
     if (state.mapInstance) { try { state.mapInstance.remove(); } catch { } state.mapInstance = null; }
+    state.pingSamplesMs = []; state.pingMedianMs = null;
 
     let colo = '';
     try {
       const res = await fetchText(traceUrl);
       if (!res.ok) {
         setStatus(els.step2Status, 'error', `Fehler bei /cdn-cgi/trace: HTTP ${res.status}`);
-        renderCfResults({ colo: '', componentName: '', embyHost: state.embyHost });
+        renderCfResults({ componentName: '' });
         return;
       }
       const text = await res.text();
@@ -253,7 +266,7 @@
     } catch (err) {
       console.error(err);
       setStatus(els.step2Status, 'error', `Netzwerk-/CORS-Problem bei Trace: ${err?.message || err}`);
-      renderCfResults({ colo: '', componentName: '', embyHost: state.embyHost });
+      renderCfResults({ componentName: '' });
       return;
     }
 
@@ -270,7 +283,7 @@
           const match = list.find(item => item && typeof item.iata === 'string' && item.iata.toUpperCase() === colo.toUpperCase());
           if (match) {
             coloCity = match.city || '';
-            componentName = match.city ? `${match.city}, ${match.cca2} - (${match.region})` : '';
+            componentName = match.city ? `${match.city}, ${match.cca2} - (${match.iata})` : '';
             coloLat = typeof match.lat === 'number' ? match.lat : null;
             coloLon = typeof match.lon === 'number' ? match.lon : null;
           }
@@ -286,13 +299,28 @@
     state.cfColo = colo;
     state.cfComponentName = componentName;
     state.remoteLabel = componentName || coloCity || colo;
-    renderCfResults({ colo, componentName, embyHost: state.embyHost });
 
     if (colo) {
       setStatus(els.step2Status, 'success', 'Cloudflare-Standort ermittelt.');
     } else {
       setStatus(els.step2Status, 'warn', 'Konnte keinen colo-Wert ermitteln. Ist der Server wirklich über Cloudflare erreichbar?');
     }
+
+    // Measure ping against Emby public info endpoint
+    try {
+      const pingCount = 8;
+      setStatus(els.step2Status, 'pending', `Messe Ping (${pingCount}x) …`);
+      const { samples, median } = await measureTracePing(embyInfoUrl, pingCount);
+      state.pingSamplesMs = samples;
+      state.pingMedianMs = median;
+      setStatus(els.step2Status, 'success', 'Ping-Messung abgeschlossen.');
+      renderPingEvaluation();
+    } catch (e) {
+      console.warn('Ping measurement failed', e);
+    }
+
+    // Render results including ping
+    renderCfResults({ componentName });
 
     // Also try to fetch client meta for own approximate location
     try {
@@ -311,6 +339,72 @@
     } catch (err) {
       console.warn('Meta fetch failed', err);
     }
+  }
+
+  function renderPingEvaluation() {
+    if (!els.pingEval) return;
+    const median = state.pingMedianMs;
+    if (median == null || !isFinite(median)) {
+      hide(els.pingEval);
+      return;
+    }
+    // Bewertung: Exzellent < 20 ms, Sehr gut 20–50 ms, In Ordnung 50–80 ms, Schlecht > 80 ms
+    let verdict = '';
+    let levelClass = '';
+    if (median < 20) {
+      verdict = 'Exzellent – optimale Voraussetzungen fürs Streaming';
+      levelClass = 'success';
+    } else if (median <= 50) {
+      verdict = 'Sehr gut – sehr gute Voraussetzungen fürs Streaming';
+      levelClass = 'success';
+    } else if (median <= 80) {
+      verdict = 'In Ordnung – kann vereinzelt zu Pufferungen führen';
+      levelClass = 'warn';
+    } else {
+      verdict = 'Schlecht – hohe Latenz, Pufferungen zu erwarten';
+      levelClass = 'error';
+    }
+    els.pingEval.innerHTML = `
+      <div class="info-row"><span class="k">Ping (Median)</span><span class="v">${escapeHtml(formatMs(median))}</span></div>
+      <div class="info-row"><span class="k">Einschätzung</span><span class="v">${escapeHtml(verdict)}</span></div>
+    `;
+    show(els.pingEval);
+    els.pingEval.className = 'card ' + levelClass;
+  }
+
+  async function measureTracePing(traceUrl, count = 5) {
+    const samples = [];
+    for (let i = 0; i < count; i++) {
+      const url = traceUrl + (traceUrl.includes('?') ? '&' : '?') + 'ping_ts=' + Date.now() + '_' + i;
+      const t0 = performance.now();
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit',
+          cache: 'no-store',
+          headers: { 'Accept': 'application/json, text/plain, */*' },
+        });
+        // Ensure body is received so timing reflects full response
+        // Try to parse JSON; fall back to text if needed
+        try { await res.json(); } catch { await res.text(); }
+        const dt = performance.now() - t0;
+        if (res.ok && isFinite(dt)) samples.push(dt);
+      } catch (_) {
+        // ignore failed sample
+      }
+    }
+    samples.sort((a, b) => a - b);
+    let median = null;
+    if (samples.length) {
+      const mid = Math.floor(samples.length / 2);
+      if (samples.length % 2 === 1) {
+        median = samples[mid];
+      } else {
+        median = (samples[mid - 1] + samples[mid]) / 2;
+      }
+    }
+    return { samples, median };
   }
 
   function renderMap({ myLat, myLon, remoteLat, remoteLon, remoteLabel }) {
@@ -358,7 +452,7 @@
     const asn = state.clientAsn != null ? String(state.clientAsn) : 'Unbekannt';
     const org = state.clientAsOrg || 'Unbekannt';
     els.ispCard.innerHTML = `
-      <div class="info-row"><span class="k">Internet Anbieter</span><span class="v">${escapeHtml(org)}</span></div>
+      <div class="info-row"><span class="k">ISP</span><span class="v">${escapeHtml(org)}</span></div>
       <div class="info-row"><span class="k">ASN</span><span class="v">${escapeHtml(asn)}</span></div>
     `;
     show(els.ispCard);
@@ -368,7 +462,7 @@
     if (!els.asnWarning) return;
     hide(els.asnWarning);
     const distKm = (state.distanceMeters || 0) / 1000;
-    if (distKm <= 1000) return; // Only show when > 1000 km
+    if (distKm < 600) return; // km limit
     const telekomAsns = new Set([3320, 48951, 5483, 5391, 6855, 12713, 8412, 13036, 12912, 5588, 5603, 6878, 2773]);
     if (!state.clientAsn || !telekomAsns.has(Number(state.clientAsn))) return;
     els.asnWarning.innerHTML = `
@@ -386,7 +480,7 @@
 
   function resetAll() {
     if (state.mapInstance) { try { state.mapInstance.remove(); } catch { } }
-    state = { embyBase: '', embyHost: '', embyInfo: null, cfColo: '', cfComponentName: '', mapInstance: null, distanceMeters: null, remoteLabel: '', clientAsn: null, clientAsOrg: '' };
+    state = { embyBase: '', embyHost: '', embyInfo: null, cfColo: '', cfComponentName: '', mapInstance: null, distanceMeters: null, remoteLabel: '', clientAsn: null, clientAsOrg: '', pingSamplesMs: [], pingMedianMs: null };
     els.embyInput.value = '';
     els.toStep2.disabled = true;
     setStatus(els.step1Status, '', '');
@@ -396,6 +490,7 @@
     if (els.cfRow) hide(els.cfRow);
     if (els.ispCard) hide(els.ispCard);
     if (els.asnWarning) hide(els.asnWarning);
+    if (els.pingEval) hide(els.pingEval);
     toggleSteps(1);
   }
 
