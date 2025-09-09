@@ -306,20 +306,6 @@
       setStatus(els.step2Status, 'warn', 'Konnte keinen colo-Wert ermitteln. Ist der Server wirklich über Cloudflare erreichbar?');
     }
 
-    // Measure ping against Emby public info endpoint
-    try {
-      const pingCount = 8;
-      setStatus(els.step2Status, 'pending', `Messe Ping (${pingCount}x) …`);
-      const { samples, median } = await measureTracePing(embyInfoUrl, pingCount);
-      state.pingSamplesMs = samples;
-      state.pingMedianMs = median;
-      setStatus(els.step2Status, 'success', 'Ping-Messung abgeschlossen.');
-      renderPingEvaluation();
-    } catch (e) {
-      console.warn('Ping measurement failed', e);
-    }
-
-    // Render results including ping
     renderCfResults({ componentName });
 
     // Also try to fetch client meta for own approximate location
@@ -339,6 +325,22 @@
     } catch (err) {
       console.warn('Meta fetch failed', err);
     }
+
+    // Measure ping against Emby public info endpoint
+    try {
+      const pingCount = 8;
+      setStatus(els.step2Status, 'pending', `Messe Ping (${pingCount}x) …`);
+      const { samples, median } = await measureTracePing(embyInfoUrl, pingCount);
+      state.pingSamplesMs = samples;
+      state.pingMedianMs = median;
+      setStatus(els.step2Status, 'success', 'Ping-Messung abgeschlossen.');
+      renderPingEvaluation();
+    } catch (e) {
+      console.warn('Ping measurement failed', e);
+    }
+
+    // Render results including ping
+    renderCfResults({ componentName });
   }
 
   function renderPingEvaluation() {

@@ -84,6 +84,9 @@ body {
 
 /* Generic cards */
 .card { padding: 12px; margin-top: 12px; }
+.card.success { background: #052e1a; color: #b7f7d0; border-color: #0b4c2e; }
+.card.error { background: #2a0f10; color: #fecaca; border-color: #7f1d1d; }
+.card.warn { background: #2a210f; color: #fde68a; border-color: #92400e; }
 .cards-row { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
 @media (min-width: 900px) {
   .cards-row { grid-template-columns: 1fr 1fr; }
